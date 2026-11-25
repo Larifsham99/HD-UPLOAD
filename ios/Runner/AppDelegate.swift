@@ -634,23 +634,26 @@ final class ExportJob {
     writer.add(vIn)
 
     // TikTok Survival Mode: GPU pre-conditioning through Core Image.
+    // Every frame goes through a pixel-buffer adaptor so HD CLEAN controls
+    // its timestamp: AVVideoComposition alone does not guarantee a frame in
+    // every slot (CI showed 30 FPS plans coming out at ~20 FPS).
     let survival = req.denoise > 0 || req.shadowLift > 0
-    let adaptor: AVAssetWriterInputPixelBufferAdaptor? = survival
-      ? AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: vIn, sourcePixelBufferAttributes: [
-          kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
-          kCVPixelBufferWidthKey as String: req.width,
-          kCVPixelBufferHeightKey as String: req.height,
-          kCVPixelBufferIOSurfacePropertiesKey as String: [:],
-        ])
-      : nil
+    let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: vIn, sourcePixelBufferAttributes: [
+      kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+      kCVPixelBufferWidthKey as String: req.width,
+      kCVPixelBufferHeightKey as String: req.height,
+      kCVPixelBufferIOSurfacePropertiesKey as String: [:],
+    ])
     let ciContext = survival ? CIContext(options: [.cacheIntermediates: false]) : nil
     let rec709 = CGColorSpace(name: CGColorSpace.itur_709)!
     let denoise = req.denoise, lift = req.shadowLift
-    func condition(_ sb: CMSampleBuffer) -> Bool {
-      guard let a = adaptor, let ctx = ciContext, let src = CMSampleBufferGetImageBuffer(sb),
-            let pool = a.pixelBufferPool else { return false }
+
+    /// TikTok Survival Mode: GPU pre-conditioning through Core Image.
+    func conditioned(_ src: CVPixelBuffer) -> CVPixelBuffer? {
+      guard survival else { return src }
+      guard let ctx = ciContext, let pool = adaptor.pixelBufferPool else { return nil }
       var out: CVPixelBuffer?
-      guard CVPixelBufferPoolCreatePixelBuffer(nil, pool, &out) == kCVReturnSuccess, let dst = out else { return false }
+      guard CVPixelBufferPoolCreatePixelBuffer(nil, pool, &out) == kCVReturnSuccess, let dst = out else { return nil }
       var img = CIImage(cvPixelBuffer: src)
       if denoise > 0, let f = CIFilter(name: "CINoiseReduction") {
         f.setValue(img, forKey: kCIInputImageKey)
@@ -667,7 +670,39 @@ final class ExportJob {
       CVBufferPropagateAttachments(src, dst)
       ctx.render(img.cropped(to: CGRect(x: 0, y: 0, width: req.width, height: req.height)), to: dst,
                  bounds: CGRect(x: 0, y: 0, width: req.width, height: req.height), colorSpace: rec709)
-      return a.append(dst, withPresentationTime: CMSampleBufferGetPresentationTimeStamp(sb))
+      return dst
+    }
+
+    // Constant frame rate: each frame is placed on the exact frameDuration
+    // grid; a frame landing in an already-used slot is dropped and empty
+    // slots are filled by repeating the previous frame, so timing (and audio
+    // sync) never drifts.
+    let slotDuration = comp.frameDuration
+    let slotSeconds = CMTimeGetSeconds(slotDuration)
+    var lastSlot: Int64 = -1
+    var lastBuffer: CVPixelBuffer?
+    func appendAt(_ pb: CVPixelBuffer, _ slot: Int64) -> Bool {
+      var waited = 0
+      while !vIn.isReadyForMoreMediaData && waited < 5000 { usleep(1000); waited += 1 }
+      let t = CMTimeAdd(range.start, CMTimeMultiply(slotDuration, multiplier: Int32(clamping: slot)))
+      return adaptor.append(pb, withPresentationTime: t)
+    }
+    func emit(_ sb: CMSampleBuffer) -> Bool {
+      guard let src = CMSampleBufferGetImageBuffer(sb), let pb = conditioned(src) else { return false }
+      let rel = CMTimeGetSeconds(CMTimeSubtract(CMSampleBufferGetPresentationTimeStamp(sb), range.start))
+      let slot = Int64((rel / slotSeconds).rounded())
+      if slot <= lastSlot { return true }
+      if let prev = lastBuffer, slot - lastSlot > 1 {
+        var k = lastSlot + 1
+        while k < slot {
+          if !appendAt(prev, k) { return false }
+          k += 1
+        }
+      }
+      if !appendAt(pb, slot) { return false }
+      lastSlot = slot
+      lastBuffer = pb
+      return true
     }
 
     // --- Audio
@@ -739,7 +774,7 @@ final class ExportJob {
           guard let sb = vOut.copyNextSampleBuffer() else { return false }
           let t = CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sb))
           self.progress((t - startSec) / total)
-          return survival ? condition(sb) : vIn.append(sb)
+          return emit(sb)
         }
         if !ok {
           vDone = true; vIn.markAsFinished(); group.leave(); return
