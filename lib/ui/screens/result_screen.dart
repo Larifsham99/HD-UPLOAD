@@ -14,6 +14,7 @@ import '../theme.dart';
 import '../widgets.dart';
 import 'compare_screen.dart';
 import 'tiktok_direct_screen.dart';
+import 'tiktok_preview_screen.dart';
 
 class ResultScreen extends StatefulWidget {
   const ResultScreen({super.key, required this.entry, required this.verified, required this.preset});
@@ -220,6 +221,20 @@ class _ResultScreenState extends State<ResultScreen> {
                 ));
               },
             ),
+            if (widget.preset.platform == 'TikTok' || widget.preset.platform == 'Any') ...[
+              const SizedBox(height: 10),
+              SecondaryButton(
+                label: 'TikTok Preview: see it after TikTok',
+                icon: Icons.science_rounded,
+                color: HD.cyan,
+                onPressed: () {
+                  _player?.pause();
+                  Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => TikTokPreviewScreen(entry: e, outputPath: _file.path, partStartMs: _partStart()),
+                  ));
+                },
+              ),
+            ],
             const SizedBox(height: 24),
             SectionTitle('Before you upload to ${widget.preset.platform == 'Any' ? 'any app' : widget.preset.platform}'),
             GlassCard(

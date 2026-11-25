@@ -21,7 +21,17 @@ class CompareScreen extends StatefulWidget {
     required this.report,
     required this.partStartMs,
     this.frameMode = 'keep',
+    this.title = 'Before & After',
+    this.beforeLabel = 'ORIGINAL',
+    this.afterLabel = 'HD CLEAN',
+    this.note,
+    this.onDispose,
   });
+  final String title;
+  final String beforeLabel;
+  final String afterLabel;
+  final String? note;
+  final VoidCallback? onDispose;
   final VideoInfo source;
   final String outputPath;
   final int outputSize;
@@ -47,6 +57,12 @@ class _CompareScreenState extends State<CompareScreen> {
   void initState() {
     super.initState();
     _grab();
+  }
+
+  @override
+  void dispose() {
+    widget.onDispose?.call();
+    super.dispose();
   }
 
   Future<void> _grab() async {
@@ -84,7 +100,7 @@ class _CompareScreenState extends State<CompareScreen> {
           child: ListView(padding: const EdgeInsets.fromLTRB(16, 4, 16, 30), children: [
             Row(children: [
               IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20)),
-              const Text('Before & After', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
+              Text(widget.title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
               const Spacer(),
               if (_loading) const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: HD.cyan)),
               const SizedBox(width: 8),
@@ -129,8 +145,8 @@ class _CompareScreenState extends State<CompareScreen> {
                             child: const Icon(Icons.code_rounded, size: 20, color: Colors.white),
                           ),
                         ),
-                        Positioned(left: 10, top: 10, child: _tag('ORIGINAL')),
-                        Positioned(right: 10, top: 10, child: _tag('HD CLEAN')),
+                        Positioned(left: 10, top: 10, child: _tag(widget.beforeLabel)),
+                        Positioned(right: 10, top: 10, child: _tag(widget.afterLabel)),
                       ]),
                     ),
                   );
@@ -156,7 +172,8 @@ class _CompareScreenState extends State<CompareScreen> {
               child: Table(
                 columnWidths: const {0: FlexColumnWidth(1.2), 1: FlexColumnWidth(1), 2: FlexColumnWidth(1)},
                 children: [
-                  _row('', 'Original', 'Optimized', header: true),
+                  _row('', widget.beforeLabel == 'ORIGINAL' ? 'Original' : 'Original → TikTok',
+                      widget.afterLabel == 'HD CLEAN' ? 'Optimized' : 'HD CLEAN → TikTok', header: true),
                   _row('Resolution', '${s.displayWidth}×${s.displayHeight}', '$outW×$outH'),
                   _row('File size', formatBytes(s.sizeBytes), formatBytes(widget.outputSize)),
                   _row('Bitrate', formatBitrate(srcTotal), formatBitrate(outBitrate)),
@@ -167,6 +184,10 @@ class _CompareScreenState extends State<CompareScreen> {
                 ],
               ),
             ),
+            if (widget.note != null) ...[
+              const SizedBox(height: 12),
+              Text(widget.note!, style: const TextStyle(color: HD.muted, fontSize: 12.5, height: 1.4)),
+            ],
             const SizedBox(height: 12),
             const Text(
               'Bitrate alone does not measure quality. Use the slider and zoom to judge detail, skin tones and colour with your own eyes.',

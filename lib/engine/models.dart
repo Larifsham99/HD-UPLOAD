@@ -229,6 +229,36 @@ enum FrameMode {
 
 enum QualityMode { maximum, balanced, smaller }
 
+/// TikTok Survival Mode: prepares the picture so it survives TikTok's own
+/// low-bitrate re-encode (removes sensor noise that would eat its bitrate,
+/// lifts deep shadows where encoders cause blocking first).
+enum SurvivalLevel { off, gentle, medium, strong }
+
+extension SurvivalLevelValues on SurvivalLevel {
+  String get label => switch (this) {
+        SurvivalLevel.off => 'Off',
+        SurvivalLevel.gentle => 'Gentle',
+        SurvivalLevel.medium => 'Medium',
+        SurvivalLevel.strong => 'Strong',
+      };
+
+  /// Edge-preserving noise reduction strength, 0–1.
+  double get denoise => switch (this) {
+        SurvivalLevel.off => 0,
+        SurvivalLevel.gentle => 0.35,
+        SurvivalLevel.medium => 0.6,
+        SurvivalLevel.strong => 0.9,
+      };
+
+  /// Shadow lift strength, 0–1.
+  double get shadowLift => switch (this) {
+        SurvivalLevel.off => 0,
+        SurvivalLevel.gentle => 0.3,
+        SurvivalLevel.medium => 0.5,
+        SurvivalLevel.strong => 0.7,
+      };
+}
+
 extension QualityModeLabel on QualityMode {
   String get label => switch (this) {
         QualityMode.maximum => 'Maximum Quality',
@@ -258,6 +288,8 @@ class EncodePlan {
     required this.upscaled,
     this.startMs,
     this.endMs,
+    this.denoise = 0,
+    this.shadowLift = 0,
   });
 
   /// Output frame size (always even).
@@ -291,6 +323,10 @@ class EncodePlan {
   final int? startMs;
   final int? endMs;
 
+  /// TikTok Survival Mode pre-conditioning (0 = off).
+  final double denoise;
+  final double shadowLift;
+
   EncodePlan copyWith({int? startMs, int? endMs}) => EncodePlan(
         width: width,
         height: height,
@@ -310,6 +346,8 @@ class EncodePlan {
         upscaled: upscaled,
         startMs: startMs ?? this.startMs,
         endMs: endMs ?? this.endMs,
+        denoise: denoise,
+        shadowLift: shadowLift,
       );
 
   Map<String, Object?> toMap() => {
@@ -328,6 +366,8 @@ class EncodePlan {
         'remuxOnly': remuxOnly,
         'startMs': startMs,
         'endMs': endMs,
+        'denoise': denoise,
+        'shadowLift': shadowLift,
       };
 }
 

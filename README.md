@@ -59,6 +59,35 @@ platform a correctly formatted, high-bitrate master to start from.
 11. **Per-platform upload checklist**: TikTok "Upload HD", Instagram "Upload at
     highest quality", WhatsApp HD toggle, Wi-Fi, and avoiding in-app filters.
 
+### TikTok Survival Mode & TikTok Preview
+
+TikTok re-encodes every upload at a low bitrate, which is why videos look HD
+for a moment and then "pecah" once TikTok's own version replaces the upload.
+Nothing inside the file can stop that. Survival Mode instead prepares the
+picture so it survives the re-encode:
+
+- **Noise reduction on the GPU.** It is edge-preserving: a bilateral GLSL
+  shader on Android, and `CINoiseReduction` with no sharpening on iOS.
+- **Gentle shadow lift.** Only the darkest tones are raised.
+- **FPS advice.** Survival Mode defaults to 30 FPS, which gives each frame
+  roughly twice the bits of 60 FPS.
+
+**TikTok Preview** then compresses the same 6-second clip of the original and
+of the HD CLEAN file, the way TikTok approximately does, and shows them side
+by side before you post.
+
+Measured with `tool/survival_benchmark.sh` (synthetic noisy scene, simulated
+2.5 Mbps TikTok encode, SSIM against the clean scene):
+
+| Comparison | SSIM |
+|---|---|
+| Without Survival Mode | 0.928 |
+| With Survival Mode, Medium | 0.931–0.933 |
+| Upload at 60 FPS | 0.920 |
+| Upload at 30 FPS | 0.929 |
+
+The improvement is real but moderate. Gains depend on how noisy the footage is.
+
 ## Architecture
 
 ```

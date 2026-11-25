@@ -1,4 +1,5 @@
 import AVFoundation
+import CoreImage
 import Flutter
 import Photos
 import PhotosUI
@@ -407,6 +408,7 @@ struct ExportRequest {
   let remuxOnly: Bool
   let startMs: Int64?, endMs: Int64?
   let sourceChannels: Int?
+  let denoise: Double, shadowLift: Double
 
   init(_ a: [String: Any]) {
     jobId = a["jobId"] as! String
@@ -428,6 +430,8 @@ struct ExportRequest {
     startMs = (a["startMs"] as? NSNumber)?.int64Value
     endMs = (a["endMs"] as? NSNumber)?.int64Value
     sourceChannels = (a["sourceChannels"] as? NSNumber)?.intValue
+    denoise = (a["denoise"] as? NSNumber)?.doubleValue ?? 0
+    shadowLift = (a["shadowLift"] as? NSNumber)?.doubleValue ?? 0
   }
 }
 
@@ -629,6 +633,43 @@ final class ExportJob {
     guard writer.canAdd(vIn) else { throw EngineError(code: "setup_failed", message: "This device's encoder does not support \(req.width)×\(req.height).") }
     writer.add(vIn)
 
+    // TikTok Survival Mode: GPU pre-conditioning through Core Image.
+    let survival = req.denoise > 0 || req.shadowLift > 0
+    let adaptor: AVAssetWriterInputPixelBufferAdaptor? = survival
+      ? AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: vIn, sourcePixelBufferAttributes: [
+          kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+          kCVPixelBufferWidthKey as String: req.width,
+          kCVPixelBufferHeightKey as String: req.height,
+          kCVPixelBufferIOSurfacePropertiesKey as String: [:],
+        ])
+      : nil
+    let ciContext = survival ? CIContext(options: [.cacheIntermediates: false]) : nil
+    let rec709 = CGColorSpace(name: CGColorSpace.itur_709)!
+    let denoise = req.denoise, lift = req.shadowLift
+    func condition(_ sb: CMSampleBuffer) -> Bool {
+      guard let a = adaptor, let ctx = ciContext, let src = CMSampleBufferGetImageBuffer(sb),
+            let pool = a.pixelBufferPool else { return false }
+      var out: CVPixelBuffer?
+      guard CVPixelBufferPoolCreatePixelBuffer(nil, pool, &out) == kCVReturnSuccess, let dst = out else { return false }
+      var img = CIImage(cvPixelBuffer: src)
+      if denoise > 0, let f = CIFilter(name: "CINoiseReduction") {
+        f.setValue(img, forKey: kCIInputImageKey)
+        f.setValue(0.01 + 0.04 * denoise, forKey: "inputNoiseLevel")
+        f.setValue(0.0, forKey: "inputSharpness") // never sharpen
+        img = f.outputImage ?? img
+      }
+      if lift > 0, let f = CIFilter(name: "CIHighlightShadowAdjust") {
+        f.setValue(img, forKey: kCIInputImageKey)
+        f.setValue(lift * 0.6, forKey: "inputShadowAmount")
+        f.setValue(1.0, forKey: "inputHighlightAmount")
+        img = f.outputImage ?? img
+      }
+      CVBufferPropagateAttachments(src, dst)
+      ctx.render(img.cropped(to: CGRect(x: 0, y: 0, width: req.width, height: req.height)), to: dst,
+                 bounds: CGRect(x: 0, y: 0, width: req.width, height: req.height), colorSpace: rec709)
+      return a.append(dst, withPresentationTime: CMSampleBufferGetPresentationTimeStamp(sb))
+    }
+
     // --- Audio
     var aOut: AVAssetReaderTrackOutput?
     var aIn: AVAssetWriterInput?
@@ -698,7 +739,7 @@ final class ExportJob {
           guard let sb = vOut.copyNextSampleBuffer() else { return false }
           let t = CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sb))
           self.progress((t - startSec) / total)
-          return vIn.append(sb)
+          return survival ? condition(sb) : vIn.append(sb)
         }
         if !ok {
           vDone = true; vIn.markAsFinished(); group.leave(); return

@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hd_clean/engine/models.dart';
 import 'package:hd_clean/engine/planner.dart';
 import 'package:hd_clean/engine/presets.dart';
+import 'package:hd_clean/engine/tiktok_sim.dart';
 import 'package:hd_clean/engine/upload_doctor.dart';
 
 VideoInfo src({
@@ -255,6 +256,32 @@ void main() {
     });
     test('long video on WhatsApp warns about Status length', () {
       expect(diagnose(src(durationMs: 120000), Preset.whatsapp).any((x) => x.title.contains('Longer than')), isTrue);
+    });
+  });
+
+  group('TikTok Survival Mode', () {
+    test('adds denoise + shadow lift, forces re-encode, caps 60 → 30 FPS', () {
+      final r = plan(src(fps: 60, bitrate: 16000000), Preset.tiktokHd, (o) => o.copyWith(survival: SurvivalLevel.medium));
+      expect(r.plan.denoise, closeTo(0.6, 1e-9));
+      expect(r.plan.shadowLift, greaterThan(0));
+      expect(r.plan.fps, 30);
+      expect(r.alreadyOptimized, isFalse);
+      expect(r.plan.toMap()['denoise'], 0.6);
+    });
+    test('survival can keep source FPS', () {
+      expect(plan(src(fps: 60, bitrate: 20000000), Preset.tiktokHd, (o) => o.copyWith(survival: SurvivalLevel.gentle, survivalFps: () => null)).plan.fps, 60);
+    });
+    test('survival is ignored for WhatsApp', () {
+      expect(plan(src(), Preset.whatsapp, (o) => o.copyWith(survival: SurvivalLevel.strong)).plan.denoise, 0);
+    });
+    test('simulation plan: short middle clip, low bitrate, fewer bits per frame at 60 FPS', () {
+      final p = tiktokSimulationPlan(width: 1080, height: 1920, fps: 30, durationMs: 30000);
+      expect(p.endMs! - p.startMs!, 6000);
+      expect(p.startMs, 12000);
+      expect(p.videoBitrate, 2500000);
+      final b60 = tiktokDeliveryBitrate(1080, 1920, 60);
+      expect(b60, greaterThan(2500000));
+      expect(b60 / 60, lessThan(2500000 / 30));
     });
   });
 

@@ -84,7 +84,20 @@ void main() {
     expect(rep.video!.fps, closeTo(plan.fps, 0.6));
   });
 
-  testWidgets('cancel stops the export and removes the partial file', (_) async {
+  testWidgets('TikTok Survival Mode export (GPU denoise + shadow lift) is valid and CFR', (_) async {
+    final info = await engine.probe(source);
+    final plan = planEncode(info, const PlanOptions(preset: Preset.tiktokHd, survival: SurvivalLevel.strong)).plan;
+    expect(plan.denoise, greaterThan(0));
+    final res = await engine.export(jobId: 'it-surv', inputUri: source, outputPath: '${dir.path}/surv.mp4', plan: plan, source: info);
+    final rep = await inspectMp4(res.path);
+    expect((rep.video!.width, rep.video!.height), (plan.width, plan.height));
+    expect(rep.video!.constantFrameRate, isTrue);
+    expect(rep.durationMs, inInclusiveRange(2500, 3400));
+    final jpg = await engine.frame(res.path, timeMs: 1000, maxSize: 320, exact: true);
+    expect(jpg, isNotNull);
+  });
+
+    testWidgets('cancel stops the export and removes the partial file', (_) async {
     final info = await engine.probe(source);
     final plan = planEncode(info, const PlanOptions(preset: Preset.tiktokHd, quality: QualityMode.maximum)).plan;
     final out = '${dir.path}/cancel.mp4';

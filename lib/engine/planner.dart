@@ -18,6 +18,8 @@ class PlanOptions {
     this.allowUpscaleTo1080 = false,
     this.forceReencode = false,
     this.highFrameRate = false,
+    this.survival = SurvivalLevel.off,
+    this.survivalFps = 30,
     this.codec = 'h264',
     this.splitForStatus = true,
     this.statusSegmentSec,
@@ -39,6 +41,14 @@ class PlanOptions {
   /// TikTok only: keep source frame rates above 60 (up to 120 FPS).
   final bool highFrameRate;
 
+  /// TikTok Survival Mode level (TikTok presets only).
+  final SurvivalLevel survival;
+
+  /// Frame-rate cap while Survival Mode is on. TikTok delivers a roughly
+  /// fixed bitrate, so fewer frames per second means more bits per frame.
+  /// null = keep the source frame rate.
+  final double? survivalFps;
+
   /// 'h264' or 'hevc' (HEVC only honoured where the preset allows it).
   final String codec;
   final bool splitForStatus;
@@ -57,6 +67,8 @@ class PlanOptions {
     bool? allowUpscaleTo1080,
     bool? forceReencode,
     bool? highFrameRate,
+    SurvivalLevel? survival,
+    double? Function()? survivalFps,
     String? codec,
     bool? splitForStatus,
     int? statusSegmentSec,
@@ -72,6 +84,8 @@ class PlanOptions {
         allowUpscaleTo1080: allowUpscaleTo1080 ?? this.allowUpscaleTo1080,
         forceReencode: forceReencode ?? this.forceReencode,
         highFrameRate: highFrameRate ?? this.highFrameRate,
+        survival: survival ?? this.survival,
+        survivalFps: survivalFps != null ? survivalFps() : this.survivalFps,
         codec: codec ?? this.codec,
         splitForStatus: splitForStatus ?? this.splitForStatus,
         statusSegmentSec: statusSegmentSec ?? this.statusSegmentSec,
@@ -195,6 +209,7 @@ PlanResult planEncode(VideoInfo s, PlanOptions o) {
   final p = o.preset;
   final notes = <String>[];
   final isCustom = p.id == PresetId.custom;
+  final survival = (p.platform == 'TikTok' || isCustom) ? o.survival : SurvivalLevel.off;
 
   if (p.id == PresetId.tiktok4k && s.shortSide < 2000) {
     throw PlannerException(
@@ -230,7 +245,8 @@ PlanResult planEncode(VideoInfo s, PlanOptions o) {
 
   // ---------- Frame rate ----------
   final srcFps = snapFps(s.fps);
-  final maxFps = (o.highFrameRate && p.platform == 'TikTok') ? 120.0 : p.maxFps;
+  var maxFps = (o.highFrameRate && p.platform == 'TikTok') ? 120.0 : p.maxFps;
+  if (survival != SurvivalLevel.off && o.survivalFps != null) maxFps = math.min(maxFps, o.survivalFps!);
   var fps = targetFps(srcFps, maxFps);
   if (isCustom && o.customFps != null) {
     fps = math.min(o.customFps!, srcFps);
@@ -328,6 +344,7 @@ PlanResult planEncode(VideoInfo s, PlanOptions o) {
   final segmentSec = o.statusSegmentSec ?? p.statusSegmentSec;
   final split = segmentSec != null && o.splitForStatus && s.durationMs > segmentSec * 1000 + 500;
   final srcMatches = !isCustom &&
+      survival == SurvivalLevel.off &&
       !o.forceReencode &&
       !split &&
       s.videoCodec == codec &&
@@ -349,6 +366,14 @@ PlanResult planEncode(VideoInfo s, PlanOptions o) {
       ..add('Re-encoding would only lose quality, so HD CLEAN re-packages it into a fast-start MP4 '
           'without touching the picture. Turn on "Force re-encode" to override.');
   } else {
+    if (survival != SurvivalLevel.off) {
+      notes.add('TikTok Survival Mode (${survival.label}): sensor noise removed with an edge-preserving filter and '
+          'deep shadows lifted slightly, so TikTok\'s re-encode spends its bits on real detail instead of noise and dark-area blocks.');
+      if (fpsChanged && o.survivalFps != null) {
+        notes.add('Frame rate set to ${formatFps(fps)} for sharpness: TikTok gives each video a roughly fixed bitrate, '
+            'so fewer frames per second means more detail per frame.');
+      }
+    }
     notes.add('${codecLabel(codec)} ${codec == 'h264' ? 'High' : 'Main'} profile, ${formatBitrate(videoBitrate)}, '
         '1-second keyframes, progressive, BT.709, fast-start MP4.');
   }
@@ -370,6 +395,8 @@ PlanResult planEncode(VideoInfo s, PlanOptions o) {
     audioSampleRate: 48000,
     remuxOnly: srcMatches,
     upscaled: g.upscaled,
+    denoise: survival.denoise,
+    shadowLift: survival.shadowLift,
   );
 
   // ---------- Splitting for Status ----------

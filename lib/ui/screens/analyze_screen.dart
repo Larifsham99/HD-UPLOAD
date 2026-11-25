@@ -32,7 +32,11 @@ class _AnalyzeScreenState extends State<AnalyzeScreen> {
   VideoInfo? _info;
   Uint8List? _thumb;
   String? _error;
-  late PlanOptions _opts = PlanOptions(preset: widget.initialPreset);
+  late PlanOptions _opts = PlanOptions(
+    preset: widget.initialPreset,
+    // On for TikTok by default: the user's goal is a sharp result *after* TikTok.
+    survival: widget.initialPreset.platform == 'TikTok' ? SurvivalLevel.medium : SurvivalLevel.off,
+  );
   bool _showAllFindings = false;
 
   @override
@@ -208,6 +212,10 @@ class _AnalyzeScreenState extends State<AnalyzeScreen> {
           padding: EdgeInsets.only(top: 8),
           child: Text('TikTok 4K needs a 4K source — never faked by upscaling.', style: TextStyle(color: HD.faint, fontSize: 12)),
         ),
+      if (_opts.preset.platform == 'TikTok' || _opts.preset.id == PresetId.custom) ...[
+        const SizedBox(height: 18),
+        _survivalCard(s),
+      ],
       const SizedBox(height: 18),
       const SectionTitle('Compression'),
       Segmented<QualityMode>(
@@ -305,6 +313,49 @@ class _AnalyzeScreenState extends State<AnalyzeScreen> {
           Switch(value: value, onChanged: (v) => setState(() => set(v))),
         ]),
       );
+
+  Widget _survivalCard(VideoInfo s) {
+    final on = _opts.survival != SurvivalLevel.off;
+    return GlassCard(
+      highlight: on,
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Row(children: [
+          Icon(Icons.shield_rounded, color: HD.cyan, size: 20),
+          SizedBox(width: 8),
+          Text('TikTok Survival Mode', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+        ]),
+        const SizedBox(height: 6),
+        const Text(
+          'Prepares the picture for TikTok\'s own compression: removes camera noise (which TikTok turns into blocks) '
+          'and gently lifts the darkest shadows. No sharpening. Use TikTok Preview after export to check the result.',
+          style: TextStyle(color: HD.muted, fontSize: 12.5, height: 1.4),
+        ),
+        const SizedBox(height: 12),
+        Segmented<SurvivalLevel>(
+          values: SurvivalLevel.values,
+          selected: _opts.survival,
+          label: (l) => l.label,
+          onChanged: (l) => setState(() => _opts = _opts.copyWith(survival: l)),
+        ),
+        if (on && s.fps > 31) ...[
+          const SizedBox(height: 12),
+          const Text('Frame rate for TikTok', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+          const SizedBox(height: 6),
+          Segmented<double>(
+            values: const [30, 60, 0],
+            selected: _opts.survivalFps ?? 0,
+            label: (v) => v == 0 ? 'Source (${s.fps.round()})' : v == 30 ? '30 · sharpest' : '60',
+            onChanged: (v) => setState(() => _opts = _opts.copyWith(survivalFps: () => v == 0 ? null : v)),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'TikTok gives each video a roughly fixed bitrate. At 30 FPS every frame gets twice the detail of 60 FPS.',
+            style: TextStyle(color: HD.faint, fontSize: 12, height: 1.35),
+          ),
+        ],
+      ]),
+    );
+  }
 
   Widget _codecRow() => Padding(
         padding: const EdgeInsets.only(bottom: 8),

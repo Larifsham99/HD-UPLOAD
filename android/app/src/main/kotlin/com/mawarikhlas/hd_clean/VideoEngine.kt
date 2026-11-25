@@ -59,6 +59,8 @@ data class ExportRequest(
     val sourceWidth: Int?,
     val sourceHeight: Int?,
     val durationMs: Long,
+    val denoise: Float,
+    val shadowLift: Float,
 ) {
     companion object {
         fun from(a: Map<String, Any?>) = ExportRequest(
@@ -85,6 +87,8 @@ data class ExportRequest(
             sourceWidth = (a["sourceWidth"] as Number?)?.toInt(),
             sourceHeight = (a["sourceHeight"] as Number?)?.toInt(),
             durationMs = (a["durationMs"] as Number?)?.toLong() ?: 0L,
+            denoise = (a["denoise"] as Number?)?.toFloat() ?: 0f,
+            shadowLift = (a["shadowLift"] as Number?)?.toFloat() ?: 0f,
         )
     }
 }
@@ -312,6 +316,11 @@ class VideoEngine(private val context: Context) {
                 presentation = presentation.copyWithTextureMinFilter(GLES20.GL_LINEAR_MIPMAP_LINEAR)
             }
             videoEffects.add(presentation)
+            // Survival pre-conditioning runs at output size (cheaper, and the
+            // noise it removes is measured at the size TikTok will encode).
+            if (req.denoise > 0f || req.shadowLift > 0f) {
+                videoEffects.add(SurvivalEffect(req.denoise, req.shadowLift))
+            }
 
             if (req.audioMode == "transcode") {
                 val ch = req.sourceChannels ?: 2
