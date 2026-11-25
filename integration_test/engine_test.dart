@@ -88,15 +88,19 @@ void main() {
     final info = await engine.probe(source);
     final plan = planEncode(info, const PlanOptions(preset: Preset.tiktokHd, quality: QualityMode.maximum)).plan;
     final out = '${dir.path}/cancel.mp4';
-    final f = engine.export(jobId: 'it-cancel', inputUri: source, outputPath: out, plan: plan, source: info);
+    // Capture the outcome immediately so an early cancel error is never unhandled.
+    final f = engine
+        .export(jobId: 'it-cancel', inputUri: source, outputPath: out, plan: plan, source: info)
+        .then<Object?>((r) => r, onError: (Object e) => e);
     await Future<void>.delayed(const Duration(milliseconds: 150));
     await engine.cancel('it-cancel');
-    try {
-      await f;
-      // A very fast device may finish before cancel arrives; that is valid.
-    } on EngineException catch (e) {
-      expect(e.cancelled, isTrue);
+    final outcome = await f;
+    if (outcome is EngineException) {
+      expect(outcome.cancelled, isTrue);
       expect(File(out).existsSync(), isFalse);
+    } else {
+      // A very fast device may finish before cancel arrives; that is valid.
+      expect(outcome, isA<EngineResult>());
     }
   });
 

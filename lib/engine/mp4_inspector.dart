@@ -245,12 +245,22 @@ void _parseStts(ByteData d, int s, Mp4Track t) {
     if (counts[i] > counts[best]) best = i;
   }
   final dom = deltas[best];
-  if (t.timescale > 0 && dom > 0) t.fps = t.timescale / dom;
+  // Timescale rounding (e.g. 30 fps in a 1 MHz timescale → 33333/33334)
+  // is still constant frame rate: allow ±1 tick (or 0.2%).
+  final tol = math.max(1, (dom * 0.002).floor());
+  var regTicks = 0, regCount = 0;
+  for (var i = 0; i < n; i++) {
+    if ((deltas[i] - dom).abs() <= tol) {
+      regTicks += deltas[i] * counts[i];
+      regCount += counts[i];
+    }
+  }
+  if (t.timescale > 0 && regCount > 0) t.fps = t.timescale * regCount / regTicks;
   // CFR: every delta equal, allowing only the final sample to differ (muxers
   // commonly shorten the last frame).
   var irregular = 0;
   for (var i = 0; i < n; i++) {
-    if (deltas[i] != dom && !(i == n - 1 && counts[i] == 1)) irregular += counts[i];
+    if ((deltas[i] - dom).abs() > tol && !(i == n - 1 && counts[i] == 1)) irregular += counts[i];
   }
   t.constantFrameRate = irregular <= math.max(1, total ~/ 500);
 }

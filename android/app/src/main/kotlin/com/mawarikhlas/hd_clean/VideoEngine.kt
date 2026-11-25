@@ -13,9 +13,12 @@ import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.ChannelMixingAudioProcessor
 import androidx.media3.common.audio.ChannelMixingMatrix
 import androidx.media3.common.audio.SonicAudioProcessor
+import androidx.media3.common.audio.SpeedProvider
+import androidx.media3.common.util.TimestampConsumer
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.effect.FrameDropEffect
 import androidx.media3.effect.Presentation
+import androidx.media3.effect.TimestampAdjustment
 import androidx.media3.transformer.AudioEncoderSettings
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.DefaultEncoderFactory
@@ -87,6 +90,24 @@ data class ExportRequest(
 }
 
 class EngineError(val code: String, message: String) : Exception(message)
+
+/**
+ * Maps each frame (1:1, as TimestampAdjustment requires) to the nearest free
+ * slot of a constant-rate grid. Timestamps stay strictly increasing and within
+ * one frame of their original time, so audio sync is preserved.
+ */
+@UnstableApi
+class CfrTimestampMap(fps: Double) : TimestampAdjustment.TimestampMap {
+    private val periodUs = 1_000_000.0 / fps
+    private var lastSlot = Long.MIN_VALUE
+
+    override fun calculateOutputTimeUs(inputTimeUs: Long, consumer: TimestampConsumer) {
+        var slot = Math.round(inputTimeUs / periodUs)
+        if (lastSlot != Long.MIN_VALUE && slot <= lastSlot) slot = lastSlot + 1
+        lastSlot = slot
+        consumer.onTimestamp(Math.round(slot * periodUs))
+    }
+}
 
 @UnstableApi
 class VideoEngine(private val context: Context) {
@@ -275,6 +296,10 @@ class VideoEngine(private val context: Context) {
                 // regularises variable-frame-rate input.
                 videoEffects.add(FrameDropEffect.createDefaultFrameDropEffect(req.fps.toFloat()))
             }
+            // True constant frame rate: FrameDropEffect only drops frames and
+            // keeps their original (irregular) timestamps, so every surviving
+            // frame is then placed on an exact 1/fps grid.
+            videoEffects.add(TimestampAdjustment(CfrTimestampMap(req.fps), SpeedProvider.DEFAULT))
             val layout = when (req.frameMode) {
                 "fill" -> Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP
                 else -> Presentation.LAYOUT_SCALE_TO_FIT // keep (same aspect) or fit (bars)
