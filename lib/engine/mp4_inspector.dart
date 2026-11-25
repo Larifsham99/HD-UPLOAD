@@ -24,6 +24,9 @@ class Mp4Track {
   int? sampleRate;
   int rotation = 0;
 
+  /// Compact frame-timing table (count×delta), for diagnostics.
+  String timing = '';
+
   bool get isVideo => handler == 'vide';
   bool get isAudio => handler == 'soun';
 
@@ -239,6 +242,8 @@ void _parseStts(ByteData d, int s, Mp4Track t) {
   }
   t.sampleCount = total;
   if (n == 0 || t.handler != 'vide') return;
+  t.timing = [for (var i = 0; i < math.min(n, 12); i++) '${counts[i]}×${deltas[i]}'].join(' ') +
+      (n > 12 ? ' … (+${n - 12})' : '') + ' @${t.timescale}';
   // Dominant delta defines the frame rate.
   var best = 0;
   for (var i = 1; i < n; i++) {
@@ -260,7 +265,10 @@ void _parseStts(ByteData d, int s, Mp4Track t) {
   // commonly shorten the last frame).
   var irregular = 0;
   for (var i = 0; i < n; i++) {
-    if ((deltas[i] - dom).abs() > tol && !(i == n - 1 && counts[i] == 1)) irregular += counts[i];
+    // Single boundary frames (first or last) commonly differ: encoder start
+    // offset or a shortened final frame. They do not affect playback.
+    final boundary = counts[i] == 1 && (i == 0 || i == n - 1);
+    if ((deltas[i] - dom).abs() > tol && !boundary) irregular += counts[i];
   }
   t.constantFrameRate = irregular <= math.max(1, total ~/ 500);
 }

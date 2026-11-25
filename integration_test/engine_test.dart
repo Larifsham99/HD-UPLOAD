@@ -63,8 +63,8 @@ void main() {
     expect((v.width, v.height), (r.plan.width, r.plan.height));
     expect(v.width! / v.height!, closeTo(9 / 16, 0.01));
     expect(normaliseVideoCodec(v.codec), 'h264');
-    expect(v.constantFrameRate, isTrue);
-    expect(v.fps, closeTo(r.plan.fps, 0.6));
+    expect(v.constantFrameRate, isTrue, reason: 'stts: ${v.timing}');
+    expect(v.fps, closeTo(r.plan.fps, 0.6), reason: 'stts: ${v.timing}');
     expect(v.isHdrTransfer, isFalse);
     expect(rep.audio?.sampleRate, 48000);
     expect(rep.fastStart, isTrue);
