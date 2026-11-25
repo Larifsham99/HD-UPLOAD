@@ -117,6 +117,23 @@ final class HDCleanEngine: NSObject, FlutterStreamHandler, PHPickerViewControlle
       saveToPhotos(args["path"] as! String, result)
     case "share":
       share(args["path"] as! String, result)
+    case "contentUri":
+      result(args["path"] as? String)
+    case "copyToFiles":
+      // Makes the file visible in Files → On My iPhone → HD CLEAN, so a web
+      // upload page can pick the untouched file via "Choose File".
+      background(result) {
+        let src = URL(fileURLWithPath: args["path"] as! String)
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let dest = docs.appendingPathComponent(src.lastPathComponent.components(separatedBy: "_").count > 1 && src.path.contains("/picked/")
+          ? src.lastPathComponent.components(separatedBy: "_").dropFirst().joined(separator: "_") : src.lastPathComponent)
+        if FileManager.default.fileExists(atPath: dest.path) { try FileManager.default.removeItem(at: dest) }
+        try FileManager.default.copyItem(at: src, to: dest)
+        return dest.path
+      }
+    case "openExternal":
+      if let u = URL(string: args["url"] as? String ?? "") { UIApplication.shared.open(u) }
+      result(nil)
     case "keepAwake":
       UIApplication.shared.isIdleTimerDisabled = args["on"] as? Bool ?? false
       result(nil)

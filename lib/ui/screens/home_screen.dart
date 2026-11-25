@@ -10,6 +10,7 @@ import '../theme.dart';
 import '../widgets.dart';
 import 'analyze_screen.dart';
 import 'result_screen.dart';
+import 'tiktok_direct_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -29,6 +30,21 @@ class _HomeScreenState extends State<HomeScreen> {
       if (uri == null || !mounted) return;
       await Navigator.of(context).push(MaterialPageRoute(builder: (_) => AnalyzeScreen(uri: uri, initialPreset: preset)));
       if (mounted) setState(() {});
+    } on EngineException catch (e) {
+      if (mounted) showError(context, e.message);
+    } finally {
+      if (mounted) setState(() => _picking = false);
+    }
+  }
+
+  /// Upload a video untouched via TikTok's web uploader.
+  Future<void> _direct() async {
+    if (_picking) return;
+    setState(() => _picking = true);
+    try {
+      final uri = await NativeEngine.instance.pickVideo();
+      if (uri == null || !mounted) return;
+      await Navigator.of(context).push(MaterialPageRoute(builder: (_) => TikTokDirectScreen(path: uri, label: 'Original video')));
     } on EngineException catch (e) {
       if (mounted) showError(context, e.message);
     } finally {
@@ -87,6 +103,28 @@ class _HomeScreenState extends State<HomeScreen> {
                     busy: _picking,
                     height: 66,
                     onPressed: () => _select(Preset.tiktokHd),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Reveal(
+                  index: 3,
+                  child: GlassCard(
+                    highlight: true,
+                    padding: const EdgeInsets.all(16),
+                    onTap: _direct,
+                    child: const Row(children: [
+                      Icon(Icons.cloud_upload_rounded, color: HD.cyan, size: 30),
+                      SizedBox(width: 14),
+                      Expanded(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text('TikTok HD Direct', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15.5)),
+                          SizedBox(height: 3),
+                          Text('Upload the original file the way a desktop browser does. The TikTok app never compresses it.',
+                              style: TextStyle(color: HD.muted, fontSize: 12.5, height: 1.35)),
+                        ]),
+                      ),
+                      Icon(Icons.chevron_right_rounded, color: HD.muted),
+                    ]),
                   ),
                 ),
                 const SizedBox(height: 30),

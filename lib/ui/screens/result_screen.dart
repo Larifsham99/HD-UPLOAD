@@ -13,6 +13,7 @@ import '../../services/native_engine.dart';
 import '../theme.dart';
 import '../widgets.dart';
 import 'compare_screen.dart';
+import 'tiktok_direct_screen.dart';
 
 class ResultScreen extends StatefulWidget {
   const ResultScreen({super.key, required this.entry, required this.verified, required this.preset});
@@ -172,6 +173,23 @@ class _ResultScreenState extends State<ResultScreen> {
             const SizedBox(height: 14),
             if (rep != null) _verification(rep, v, a),
             const SizedBox(height: 20),
+            if (widget.preset.platform == 'TikTok' || widget.preset.platform == 'Any') ...[
+              GradientButton(
+                label: 'TIKTOK HD DIRECT UPLOAD',
+                icon: Icons.cloud_upload_rounded,
+                onPressed: () {
+                  _player?.pause();
+                  Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => TikTokDirectScreen(path: _file.path, label: 'HD CLEAN video', sizeBytes: _file.sizeBytes),
+                  ));
+                },
+              ),
+              const Padding(
+                padding: EdgeInsets.fromLTRB(8, 8, 8, 14),
+                child: Text('Uploads through TikTok\'s web uploader, like a desktop browser. The TikTok app is skipped, so it cannot re-compress the file on your phone.',
+                    textAlign: TextAlign.center, style: TextStyle(color: HD.faint, fontSize: 12, height: 1.4)),
+              ),
+            ],
             GradientButton(
               label: multi ? 'SAVE ALL TO GALLERY' : 'SAVE TO GALLERY',
               icon: Icons.download_rounded,

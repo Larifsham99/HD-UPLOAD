@@ -124,6 +124,14 @@ void main() {
   group('frame rate', () {
     test('preserves 60 fps for TikTok', () => expect(plan(src(fps: 60, bitrate: 25000000)).plan.fps, 60));
     test('preserves 29.97', () => expect(plan(src(fps: 29.97)).plan.fps, 29.97));
+    test('120 kept with highFrameRate on TikTok, bitrate raised', () {
+      final r = plan(src(fps: 120, bitrate: 50000000), Preset.tiktokHd, (o) => o.copyWith(highFrameRate: true, quality: QualityMode.maximum));
+      expect(r.plan.fps, 120);
+      expect(r.plan.videoBitrate, greaterThan(20000000));
+    });
+    test('highFrameRate ignored for WhatsApp', () {
+      expect(plan(src(fps: 120, bitrate: 50000000), Preset.whatsapp, (o) => o.copyWith(highFrameRate: true)).plan.fps, 30);
+    });
     test('120 → 60 (even cadence)', () => expect(plan(src(fps: 120, bitrate: 40000000)).plan.fps, 60));
     test('WhatsApp 60 → 30', () => expect(plan(src(fps: 60), Preset.whatsapp).plan.fps, 30));
     test('WhatsApp 50 → 25 (not 30, avoids judder)', () => expect(plan(src(fps: 50), Preset.whatsapp).plan.fps, 25));

@@ -227,6 +227,10 @@ class _AnalyzeScreenState extends State<AnalyzeScreen> {
       const SizedBox(height: 12),
       if (_opts.preset.allowHevc && _opts.preset.id != PresetId.custom) _codecRow(),
       if (_opts.preset.id == PresetId.custom) _customControls(s),
+      if (s.fps > 61 && _opts.preset.platform == 'TikTok')
+        _toggle('Keep high frame rate (up to 120 FPS)',
+            'Keeps the source\'s ${s.fps.round()} FPS motion. Best with TikTok HD Direct upload; the TikTok app may reduce it.',
+            _opts.highFrameRate, (v) => _opts = _opts.copyWith(highFrameRate: v)),
       if (s.shortSide < 1000)
         _toggle('Export at 1080p upload tier', 'Platforms may treat 1080p uploads with a higher bitrate. This does not add detail.',
             _opts.allowUpscaleTo1080, (v) => _opts = _opts.copyWith(allowUpscaleTo1080: v)),

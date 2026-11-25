@@ -17,6 +17,7 @@ class PlanOptions {
     this.frameMode = FrameMode.keep,
     this.allowUpscaleTo1080 = false,
     this.forceReencode = false,
+    this.highFrameRate = false,
     this.codec = 'h264',
     this.splitForStatus = true,
     this.statusSegmentSec,
@@ -35,6 +36,9 @@ class PlanOptions {
   final bool allowUpscaleTo1080;
   final bool forceReencode;
 
+  /// TikTok only: keep source frame rates above 60 (up to 120 FPS).
+  final bool highFrameRate;
+
   /// 'h264' or 'hevc' (HEVC only honoured where the preset allows it).
   final String codec;
   final bool splitForStatus;
@@ -52,6 +56,7 @@ class PlanOptions {
     FrameMode? frameMode,
     bool? allowUpscaleTo1080,
     bool? forceReencode,
+    bool? highFrameRate,
     String? codec,
     bool? splitForStatus,
     int? statusSegmentSec,
@@ -66,6 +71,7 @@ class PlanOptions {
         frameMode: frameMode ?? this.frameMode,
         allowUpscaleTo1080: allowUpscaleTo1080 ?? this.allowUpscaleTo1080,
         forceReencode: forceReencode ?? this.forceReencode,
+        highFrameRate: highFrameRate ?? this.highFrameRate,
         codec: codec ?? this.codec,
         splitForStatus: splitForStatus ?? this.splitForStatus,
         statusSegmentSec: statusSegmentSec ?? this.statusSegmentSec,
@@ -224,7 +230,8 @@ PlanResult planEncode(VideoInfo s, PlanOptions o) {
 
   // ---------- Frame rate ----------
   final srcFps = snapFps(s.fps);
-  var fps = targetFps(srcFps, p.maxFps);
+  final maxFps = (o.highFrameRate && p.platform == 'TikTok') ? 120.0 : p.maxFps;
+  var fps = targetFps(srcFps, maxFps);
   if (isCustom && o.customFps != null) {
     fps = math.min(o.customFps!, srcFps);
     if (o.customFps! > srcFps + 0.1) {
@@ -245,7 +252,13 @@ PlanResult planEncode(VideoInfo s, PlanOptions o) {
   final codec = (p.allowHevc && o.codec == 'hevc') ? 'hevc' : 'h264';
 
   // ---------- Video bitrate ----------
-  final range = fps > 31 ? p.rate60 : p.rate30;
+  var range = fps > 31 ? p.rate60 : p.rate30;
+  if (fps > 61) {
+    // High frame rate: more frames per second need more bits (sub-linear).
+    final k = math.pow(fps / 60, 0.6).toDouble();
+    range = BitrateRange((range.min * k).round(), (range.max * k).round(), (range.small * k).round());
+    notes.add('High frame rate kept: ${formatFps(fps)} with a bitrate raised to match.');
+  }
   final presetPixels = p.shortEdge * p.longEdge;
   final contentPixels = math.min(g.cw, g.w) * math.min(g.ch, g.h);
   final pixelScale = math.pow(math.min(1.0, contentPixels / presetPixels), 0.75).toDouble();

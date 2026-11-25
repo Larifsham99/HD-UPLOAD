@@ -128,6 +128,22 @@ class MainActivity : FlutterActivity() {
             } catch (e: Exception) {
                 result.error("share_failed", "Could not open sharing: ${e.message}", null)
             }
+            "contentUri" -> try {
+                val path = call.argument<String>("path")!!
+                result.success(
+                    if (path.startsWith("content://")) path
+                    else androidx.core.content.FileProvider.getUriForFile(this, "$packageName.fileprovider", java.io.File(path)).toString(),
+                )
+            } catch (e: Exception) {
+                result.error("uri_failed", "Could not prepare the file for upload: ${e.message}", null)
+            }
+            "copyToFiles" -> result.success(call.argument<String>("path"))
+            "openExternal" -> try {
+                startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(call.argument<String>("url")!!)))
+                result.success(null)
+            } catch (e: Exception) {
+                result.error("open_failed", "No browser available: ${e.message}", null)
+            }
             "keepAwake" -> {
                 if (call.argument<Boolean>("on") == true) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                 else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)

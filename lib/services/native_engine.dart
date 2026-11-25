@@ -139,5 +139,13 @@ class NativeEngine {
   /// target: tiktok | instagram | whatsapp | any
   Future<void> share(String path, String target) => _call('share', {'path': path, 'target': target});
 
+  /// Android: content:// URI the in-app browser can upload directly.
+  Future<String?> contentUri(String path) => _call<String>('contentUri', {'path': path});
+
+  /// iOS: copies into the app's Documents (visible in the Files app).
+  Future<String?> copyToFiles(String path) => _call<String>('copyToFiles', {'path': path});
+
+  Future<void> openExternal(String url) => _call('openExternal', {'url': url});
+
   Future<void> keepAwake(bool on) => _call('keepAwake', {'on': on});
 }

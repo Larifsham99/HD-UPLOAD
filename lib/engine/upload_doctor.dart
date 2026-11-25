@@ -72,7 +72,9 @@ List<Finding> diagnose(VideoInfo s, Preset p) {
   if (fps > p.maxFps + 0.5) {
     f.add(Finding(Severity.info, '${fps.round()} FPS is above ${p.platform}\'s ${p.maxFps.round()} FPS',
         'The platform would drop frames itself, often unevenly.',
-        fix: 'Reduced with an even cadence (no judder).'));
+        fix: p.platform == 'TikTok'
+            ? 'Reduced evenly to ${p.maxFps.round()} FPS, or keep up to 120 FPS with "Keep high frame rate" and TikTok HD Direct.'
+            : 'Reduced with an even cadence (no judder).'));
   }
 
   if (s.shortSide > p.shortEdge * 1.05) {
@@ -164,6 +166,7 @@ List<Finding> diagnose(VideoInfo s, Preset p) {
 /// Platform-side settings and habits that matter as much as the file itself.
 List<String> uploadTips(Preset p) => switch (p.platform) {
       'TikTok' => const [
+          'Best quality: use "TikTok HD Direct". The TikTok app re-compresses videos on your phone before uploading; the web uploader sends the file itself.',
           'Turn on "Allow high-quality uploads" / "Upload HD" in TikTok: Settings and privacy → Data saver / Upload quality (name varies by version).',
           'Upload on Wi-Fi. On slow or metered connections TikTok may compress harder.',
           'Avoid adding TikTok filters or effects that re-render the whole video; add text and sounds sparingly.',

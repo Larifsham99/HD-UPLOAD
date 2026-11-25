@@ -1,5 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- Only for "TikTok HD Direct" web upload. Video processing is fully offline. -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <!-- Only needed to save to the gallery on Android 9 and older. -->
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
