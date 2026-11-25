@@ -242,8 +242,8 @@ void _parseStts(ByteData d, int s, Mp4Track t) {
   }
   t.sampleCount = total;
   if (n == 0 || t.handler != 'vide') return;
-  t.timing = [for (var i = 0; i < math.min(n, 12); i++) '${counts[i]}×${deltas[i]}'].join(' ') +
-      (n > 12 ? ' … (+${n - 12})' : '') + ' @${t.timescale}';
+  final head = [for (var i = 0; i < math.min(n, 12); i++) '${counts[i]}×${deltas[i]}'].join(' ');
+  t.timing = '$head${n > 12 ? ' … (+${n - 12})' : ''} @${t.timescale}';
   // Dominant delta defines the frame rate.
   var best = 0;
   for (var i = 1; i < n; i++) {
