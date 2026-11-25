@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Exported videos live in the app's private files dir; shared via content:// only. -->
+    <files-path name="exports" path="exports/" />
+</paths>
